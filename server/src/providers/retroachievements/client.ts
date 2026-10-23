@@ -4,6 +4,15 @@ export const RA_API_BASE = "https://retroachievements.org/API";
 export const RA_MEDIA_BASE = "https://media.retroachievements.org";
 export const RA_SITE_BASE = "https://retroachievements.org";
 
+// Identifies this app to RetroAchievements, following the {name}/{version}
+// convention in its integration docs. Workers send no User-Agent by default.
+const USER_AGENT = "AchievementHub/0.1.0";
+
+/** First part of a response body, on one line, for logs. */
+function snippet(body: string): string {
+  return body.replace(/\s+/g, " ").trim().slice(0, 300) || "(empty body)";
+}
+
 export interface RaAuth {
   username: string;
   apiKey: string;
@@ -104,9 +113,16 @@ export class RetroAchievementsClient {
 
     let res: Response;
     try {
-      res = await this.fetchImpl(url, { headers: { Accept: "application/json" } });
-    } catch {
+      res = await this.fetchImpl(url, { headers: { Accept: "application/json", "User-Agent": USER_AGENT } });
+    } catch (err) {
+      console.error(`RetroAchievements ${endpoint}: request failed:`, err);
       throw new ProviderError("Could not reach RetroAchievements. Try again shortly.");
+    }
+
+    // Read the body once so failures can be logged with what the server said.
+    const body = await res.text().catch(() => "");
+    if (!res.ok) {
+      console.error(`RetroAchievements ${endpoint}: HTTP ${res.status}: ${snippet(body)}`);
     }
     if (res.status === 401 || res.status === 403) {
       throw new ProviderError("RetroAchievements rejected the API key.", 401);
@@ -120,7 +136,13 @@ export class RetroAchievementsClient {
     if (!res.ok) {
       throw new ProviderError(`RetroAchievements returned HTTP ${res.status}.`);
     }
-    return (await res.json()) as T;
+    try {
+      return JSON.parse(body) as T;
+    } catch {
+      // e.g. an HTML error or bot-protection page instead of JSON.
+      console.error(`RetroAchievements ${endpoint}: expected JSON, got: ${snippet(body)}`);
+      throw new ProviderError("RetroAchievements sent an unexpected response. Try again shortly.");
+    }
   }
 
   getUserProfile(username = this.auth.username) {

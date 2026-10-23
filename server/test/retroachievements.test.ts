@@ -98,3 +98,42 @@ describe("RetroAchievements provider", () => {
     expect(recent[0]).toMatchObject({ id: "1", gameId: "228", earnedHardcore: true, earned: true });
   });
 });
+
+describe("RetroAchievements client errors", () => {
+  const respondWith = (response: () => Response) => {
+    const seen: RequestInit[] = [];
+    const impl = (async (_input: string | URL, init?: RequestInit) => {
+      seen.push(init ?? {});
+      return response();
+    }) as typeof fetch;
+    return { impl, seen };
+  };
+
+  it("sends an identifying User-Agent", async () => {
+    const { impl, seen } = respondWith(() => Response.json(raFixtures.profile));
+    await createRetroAchievementsProvider(impl).verify(creds);
+    expect(new Headers(seen[0].headers).get("User-Agent")).toMatch(/^AchievementHub\/\d/);
+  });
+
+  it("reports a non-JSON page as an unexpected response, not a crash", async () => {
+    const { impl } = respondWith(() => new Response("<html>Just a moment...</html>", { status: 200 }));
+    const err = await createRetroAchievementsProvider(impl).verify(creds).catch((e) => e);
+    expect(err).toBeInstanceOf(ProviderError);
+    expect(err.status).toBe(502);
+    expect(err.message).toMatch(/unexpected response/);
+  });
+
+  it("includes the upstream status for server errors", async () => {
+    const { impl } = respondWith(() => new Response("down", { status: 503 }));
+    const err = await createRetroAchievementsProvider(impl).verify(creds).catch((e) => e);
+    expect(err.message).toBe("RetroAchievements returned HTTP 503.");
+  });
+
+  it("reports network failures", async () => {
+    const impl = (async () => {
+      throw new TypeError("fetch failed");
+    }) as typeof fetch;
+    const err = await createRetroAchievementsProvider(impl).verify(creds).catch((e) => e);
+    expect(err.message).toMatch(/Could not reach/);
+  });
+});
