@@ -111,9 +111,12 @@ export class RetroAchievementsClient {
     url.searchParams.set("y", this.auth.apiKey);
     for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
 
+    // Call fetch unbound: Workers throws "Illegal invocation" if it runs with
+    // `this` set to another object, as `this.fetchImpl(...)` would do.
+    const fetchFn = this.fetchImpl;
     let res: Response;
     try {
-      res = await this.fetchImpl(url, { headers: { Accept: "application/json", "User-Agent": USER_AGENT } });
+      res = await fetchFn(url, { headers: { Accept: "application/json", "User-Agent": USER_AGENT } });
     } catch (err) {
       console.error(`RetroAchievements ${endpoint}: request failed:`, err);
       throw new ProviderError("Could not reach RetroAchievements. Try again shortly.");

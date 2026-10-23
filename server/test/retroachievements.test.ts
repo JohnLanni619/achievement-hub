@@ -129,6 +129,17 @@ describe("RetroAchievements client errors", () => {
     expect(err.message).toBe("RetroAchievements returned HTTP 503.");
   });
 
+  it("calls fetch unbound, as Cloudflare Workers requires", async () => {
+    // Workers' fetch throws if `this` is anything but undefined or the global scope.
+    const workersLikeFetch = function (this: unknown) {
+      if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
+      return Promise.resolve(Response.json(raFixtures.profile));
+    } as unknown as typeof fetch;
+    await expect(createRetroAchievementsProvider(workersLikeFetch).verify(creds)).resolves.toMatchObject({
+      displayName: "TestPlayer",
+    });
+  });
+
   it("reports network failures", async () => {
     const impl = (async () => {
       throw new TypeError("fetch failed");
