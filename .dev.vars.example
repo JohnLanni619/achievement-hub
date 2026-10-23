@@ -1,0 +1,11 @@
+# Copy to .dev.vars for local development (`npm run dev`). Never commit .dev.vars.
+APP_SECRET=dev-only-secret-change-me
+ENABLE_DEMO_PROVIDER=true
+# Lets you sign in from localhost without Google.
+DEV_LOGIN=true
+# Optional locally: set these to test real Google sign-in.
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+# Set when using the Vite dev server so Google redirects back to it, and add
+# http://localhost:5173/api/auth/google/callback as a redirect URI in Google Cloud.
+PUBLIC_URL=http://localhost:5173
