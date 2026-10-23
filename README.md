@@ -6,6 +6,27 @@ Track your achievements from multiple gaming services in one place. Sign in with
 
 It runs on **Cloudflare's free tier**: a Worker serves the React app and the API, and **D1** (Cloudflare's SQLite database) stores the data.
 
+## Using it on Android handhelds (AYN Thor, Retroid, Odin…)
+
+Achievement Hub is an installable web app (PWA), so there's no APK to sideload, and updates arrive automatically on every deploy.
+
+1. Open the site in **Chrome** on the device.
+2. Tap **⋮ → Add to Home screen → Install**.
+3. Launch it from the home screen. It opens full-screen like a native app.
+
+It works by touch or with the built-in controls:
+
+| Control              | Action                                            |
+| -------------------- | ------------------------------------------------- |
+| D-pad / left stick   | Move between items                                |
+| A                    | Select                                            |
+| B                    | Back (or close the on-screen keyboard)            |
+| LB / RB              | Scroll a page up / down                           |
+
+A button-hint bar and a focus highlight appear while the controller is in use, and disappear when you touch the screen. The same controls work in any desktop browser with a gamepad or the arrow keys.
+
+**Why not a native APK?** Google blocks its sign-in inside embedded web views, which is how most "web app to APK" wrappers work. If you ever do want an APK, wrap the PWA as a Trusted Web Activity with [Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap) or [PWABuilder](https://www.pwabuilder.com/). Both run the app in Chrome, so sign-in keeps working.
+
 ## Local development
 
 Requires Node.js 20 or newer.
@@ -23,7 +44,7 @@ Open http://localhost:5173. On the sign-in page, use **Dev sign-in** with any em
 | Command                     | What it does                                             |
 | --------------------------- | -------------------------------------------------------- |
 | `npm run dev`               | Local Worker + Vite dev server                           |
-| `npm test`                  | API and RetroAchievements tests                          |
+| `npm test`                  | API, RetroAchievements, and controller-navigation tests  |
 | `npm run typecheck`         | Type-checks the server and the web app                   |
 | `npm run build`             | Builds the web app into `web/dist`                       |
 | `npm run deploy`            | Build, apply remote migrations, deploy to Cloudflare     |

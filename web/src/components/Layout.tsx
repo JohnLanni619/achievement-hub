@@ -1,9 +1,12 @@
+import { useSyncExternalStore } from "react";
 import { Link, Outlet } from "react-router-dom";
 import { useAuth } from "../auth";
+import { getNavMode, onNavModeChange } from "../nav/controller";
 import { Img } from "./ui";
 
 export function Layout() {
   const { user, logout } = useAuth();
+  const navMode = useSyncExternalStore(onNavModeChange, getNavMode);
   return (
     <div className="app">
       <header className="topbar">
@@ -23,6 +26,23 @@ export function Layout() {
       <main className="content">
         <Outlet />
       </main>
+      {navMode === "pad" && (
+        <footer className="pad-hints" aria-hidden>
+          <span>
+            <kbd>✥</kbd> Move
+          </span>
+          <span>
+            <kbd>A</kbd> Select
+          </span>
+          <span>
+            <kbd>B</kbd> Back
+          </span>
+          <span>
+            <kbd>LB</kbd>
+            <kbd>RB</kbd> Scroll
+          </span>
+        </footer>
+      )}
     </div>
   );
 }

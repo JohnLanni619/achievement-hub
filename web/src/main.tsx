@@ -9,7 +9,14 @@ import { Dashboard } from "./pages/Dashboard";
 import { GamePage } from "./pages/GamePage";
 import { LoginPage } from "./pages/LoginPage";
 import { ProviderPage } from "./pages/ProviderPage";
+import { installControllerNavigation } from "./nav/controller";
 import "./styles.css";
+
+installControllerNavigation();
+
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+}
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();

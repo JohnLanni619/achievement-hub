@@ -92,6 +92,60 @@ a:focus-visible {
   outline-offset: 2px;
 }
 
+/* Controller navigation: a strong focus ring, since there's no pointer. */
+[data-nav="pad"] :focus {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+/* Keep focused items clear of the sticky header and the hint bar. */
+main * {
+  scroll-margin-top: 80px;
+  scroll-margin-bottom: 72px;
+}
+[data-nav="pad"] .card:focus {
+  border-color: var(--accent);
+}
+.pad-hints {
+  position: fixed;
+  inset: auto 0 0 0;
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--muted);
+  z-index: 10;
+}
+.pad-hints kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 1px 5px;
+  margin-right: 4px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Touch screens: larger tap targets. */
+@media (pointer: coarse) {
+  .btn-small {
+    padding: 9px 14px;
+  }
+  input,
+  select {
+    padding: 10px 12px;
+  }
+  .segmented button {
+    padding: 10px 14px;
+  }
+}
+
 /* Layout */
 .topbar {
   display: flex;
@@ -118,6 +172,8 @@ a:focus-visible {
   max-width: 1100px;
   margin: 0 auto;
   padding: 28px 24px 64px;
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
 }
 .narrow {
   max-width: 520px;
@@ -512,4 +568,8 @@ img,
   .toolbar input[type="search"] {
     width: 100%;
   }
+}
+
+[data-nav="pad"] .content {
+  padding-bottom: 96px;
 }

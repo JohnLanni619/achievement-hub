@@ -82,7 +82,8 @@ export function GamePage() {
         {g.total > 0 && achievements.length === 0 && <EmptyState>Nothing here.</EmptyState>}
         <ul className="list">
           {achievements.map((a) => (
-            <li key={a.id} className={`card achievement ${a.earned ? "" : "locked"}`}>
+            // Focusable so controller users can step through achievements one by one.
+            <li key={a.id} className={`card achievement ${a.earned ? "" : "locked"}`} tabIndex={0}>
               <Img src={a.earned ? a.badgeUrl : (a.lockedBadgeUrl ?? a.badgeUrl)} alt="" size={64} className="badge" />
               <div className="grow stack-sm">
                 <div className="row wrap">
