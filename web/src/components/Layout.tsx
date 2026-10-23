@@ -1,5 +1,6 @@
 import { Link, Outlet } from "react-router-dom";
 import { useAuth } from "../auth";
+import { Img } from "./ui";
 
 export function Layout() {
   const { user, logout } = useAuth();
@@ -11,6 +12,7 @@ export function Layout() {
         </Link>
         {user && (
           <div className="topbar-user">
+            {user.avatarUrl && <Img src={user.avatarUrl} alt="" size={28} className="avatar" />}
             <span className="muted">{user.displayName}</span>
             <button className="btn btn-ghost btn-small" onClick={() => logout()}>
               Sign out

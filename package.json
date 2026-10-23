@@ -7,13 +7,16 @@
     "web"
   ],
   "scripts": {
-    "dev": "concurrently -n server,web -c blue,magenta \"npm run dev -w server\" \"npm run dev -w web\"",
-    "build": "npm run build -w web && npm run build -w server",
-    "start": "npm run start -w server",
+    "dev": "npm run db:migrate:local && concurrently -n api,web -c blue,magenta \"wrangler dev\" \"npm run dev -w web\"",
+    "build": "npm run build -w web",
+    "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "test": "npm test -w server",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w web"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "wrangler": "^4.40.0"
   }
 }

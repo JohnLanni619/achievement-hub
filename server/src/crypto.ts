@@ -1,52 +1,54 @@
-import crypto from "node:crypto";
-import { promisify } from "node:util";
+// Web Crypto only, so this runs on Cloudflare Workers (and in Node for tests).
 
-const scrypt = promisify(crypto.scrypt) as (password: string, salt: Buffer, keylen: number) => Promise<Buffer>;
+const encoder = new TextEncoder();
 
-const KEY_LENGTH = 64;
-
-export async function hashPassword(password: string): Promise<string> {
-  const salt = crypto.randomBytes(16);
-  const hash = await scrypt(password, salt, KEY_LENGTH);
-  return `scrypt$${salt.toString("base64")}$${hash.toString("base64")}`;
+function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
 }
 
-export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [scheme, saltB64, hashB64] = stored.split("$");
-  if (scheme !== "scrypt" || !saltB64 || !hashB64) return false;
-  const expected = Buffer.from(hashB64, "base64");
-  const actual = await scrypt(password, Buffer.from(saltB64, "base64"), expected.length);
-  return crypto.timingSafeEqual(expected, actual);
+function fromBase64(value: string): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
 }
 
-export function randomToken(): string {
-  return crypto.randomBytes(32).toString("base64url");
+function toBase64Url(bytes: Uint8Array): string {
+  return toBase64(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-export function sha256(value: string): string {
-  return crypto.createHash("sha256").update(value).digest("hex");
+export function randomToken(byteLength = 32): string {
+  return toBase64Url(crypto.getRandomValues(new Uint8Array(byteLength)));
+}
+
+export async function sha256Hex(value: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value)));
+  return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** The PKCE S256 code challenge for a verifier. */
+export async function pkceChallenge(verifier: string): Promise<string> {
+  return toBase64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(verifier))));
 }
 
 /** Symmetric encryption for provider credentials at rest (AES-256-GCM). */
 export class SecretBox {
-  private key: Buffer;
+  private key: Promise<CryptoKey>;
 
   constructor(secret: string) {
-    this.key = crypto.createHash("sha256").update(`achievement-hub:credentials:${secret}`).digest();
+    this.key = crypto.subtle
+      .digest("SHA-256", encoder.encode(`achievement-hub:credentials:${secret}`))
+      .then((raw) => crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]));
   }
 
-  encrypt(plaintext: string): string {
-    const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv("aes-256-gcm", this.key, iv);
-    const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-    const tag = cipher.getAuthTag();
-    return [iv, tag, ciphertext].map((b) => b.toString("base64")).join(".");
+  async encrypt(plaintext: string): Promise<string> {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await this.key, encoder.encode(plaintext));
+    return `${toBase64(iv)}.${toBase64(new Uint8Array(ciphertext))}`;
   }
 
-  decrypt(payload: string): string {
-    const [iv, tag, ciphertext] = payload.split(".").map((part) => Buffer.from(part, "base64"));
-    const decipher = crypto.createDecipheriv("aes-256-gcm", this.key, iv);
-    decipher.setAuthTag(tag);
-    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+  async decrypt(payload: string): Promise<string> {
+    const [iv, ciphertext] = payload.split(".").map(fromBase64);
+    const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, await this.key, ciphertext);
+    return new TextDecoder().decode(plaintext);
   }
 }

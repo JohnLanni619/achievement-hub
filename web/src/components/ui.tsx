@@ -55,7 +55,9 @@ export function AwardBadge({ award }: { award?: Award }) {
 
 export function Img({ src, alt, size, className = "" }: { src?: string; alt: string; size: number; className?: string }) {
   if (!src) return <div className={`img-placeholder ${className}`} style={{ width: size, height: size }} aria-hidden />;
-  return <img src={src} alt={alt} width={size} height={size} loading="lazy" className={className} />;
+  return (
+    <img src={src} alt={alt} width={size} height={size} loading="lazy" referrerPolicy="no-referrer" className={className} />
+  );
 }
 
 export function EmptyState({ children }: { children: ReactNode }) {

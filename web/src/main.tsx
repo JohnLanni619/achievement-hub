@@ -4,10 +4,10 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-route
 import { AuthProvider, useAuth } from "./auth";
 import { Layout } from "./components/Layout";
 import { Spinner } from "./components/ui";
-import { AuthPage } from "./pages/AuthPage";
 import { Connect } from "./pages/Connect";
 import { Dashboard } from "./pages/Dashboard";
 import { GamePage } from "./pages/GamePage";
+import { LoginPage } from "./pages/LoginPage";
 import { ProviderPage } from "./pages/ProviderPage";
 import "./styles.css";
 
@@ -25,8 +25,7 @@ createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <Routes>
           <Route element={<Layout />}>
-            <Route path="/login" element={<AuthPage mode="login" />} />
-            <Route path="/register" element={<AuthPage mode="register" />} />
+            <Route path="/login" element={<LoginPage />} />
             <Route path="/" element={<RequireAuth><Dashboard /></RequireAuth>} />
             <Route path="/connect/:providerId" element={<RequireAuth><Connect /></RequireAuth>} />
             <Route path="/p/:providerId" element={<RequireAuth><ProviderPage /></RequireAuth>} />

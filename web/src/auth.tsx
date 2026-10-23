@@ -4,8 +4,8 @@ import { api, setUnauthenticatedHandler, type User } from "./api";
 interface AuthState {
   user: User | null;
   loading: boolean;
-  login(email: string, password: string): Promise<void>;
-  register(email: string, password: string, displayName: string): Promise<void>;
+  /** Local development only; real sign-in is a redirect to /api/auth/google. */
+  devLogin(email: string): Promise<void>;
   logout(): Promise<void>;
 }
 
@@ -24,12 +24,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    setUser((await api.login(email, password)).user);
-  }, []);
-
-  const register = useCallback(async (email: string, password: string, displayName: string) => {
-    setUser((await api.register(email, password, displayName)).user);
+  const devLogin = useCallback(async (email: string) => {
+    setUser((await api.devLogin(email)).user);
   }, []);
 
   const logout = useCallback(async () => {
@@ -37,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
-  const value = useMemo(() => ({ user, loading, login, register, logout }), [user, loading, login, register, logout]);
+  const value = useMemo(() => ({ user, loading, devLogin, logout }), [user, loading, devLogin, logout]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

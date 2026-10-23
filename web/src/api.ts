@@ -4,6 +4,7 @@ export interface User {
   id: number;
   email: string;
   displayName: string;
+  avatarUrl: string | null;
 }
 
 export interface CredentialField {
@@ -128,9 +129,8 @@ const p = (providerId: string) => `/connections/${encodeURIComponent(providerId)
 
 export const api = {
   me: () => request<{ user: User | null }>("GET", "/auth/me"),
-  login: (email: string, password: string) => request<{ user: User }>("POST", "/auth/login", { email, password }),
-  register: (email: string, password: string, displayName: string) =>
-    request<{ user: User }>("POST", "/auth/register", { email, password, displayName }),
+  authConfig: () => request<{ google: boolean; devLogin: boolean }>("GET", "/auth/config"),
+  devLogin: (email: string) => request<{ user: User }>("POST", "/auth/dev-login", { email }),
   logout: () => request<void>("POST", "/auth/logout"),
 
   providers: () => request<{ providers: ProviderWithConnection[] }>("GET", "/providers"),

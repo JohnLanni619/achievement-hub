@@ -357,6 +357,19 @@ img,
   gap: 14px;
 }
 
+.btn-google {
+  background: var(--surface);
+  gap: 10px;
+}
+.btn.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.dev-login {
+  border-top: 1px dashed var(--border);
+  padding-top: 14px;
+}
+
 /* Dashboard */
 .provider-card {
   display: flex;
