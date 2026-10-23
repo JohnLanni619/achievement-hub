@@ -29,7 +29,7 @@ A button-hint bar and a focus highlight appear while the controller is in use, a
 
 ## Local development
 
-Requires Node.js 20 or newer.
+Requires Node.js 22.12 or newer.
 
 ```bash
 npm install
