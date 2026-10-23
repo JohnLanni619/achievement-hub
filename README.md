@@ -29,7 +29,7 @@ A button-hint bar and a focus highlight appear while the controller is in use, a
 
 ## Local development
 
-Requires Node.js 20 or newer.
+Use **Node.js 24 LTS** (the version in `.nvmrc`; run `nvm use` if you use nvm). Node 26 also works, and 22.12 is the oldest supported version.
 
 ```bash
 npm install
