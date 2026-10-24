@@ -1,12 +1,14 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import type { Env } from "../src/context.js";
 import { pkceChallenge } from "../src/crypto.js";
+import { GOOGLE_JWKS_URL } from "../src/google-id-token.js";
 import { demoProvider } from "../src/providers/demo.js";
 import { ProviderRegistry } from "../src/providers/registry.js";
 import { createRetroAchievementsProvider } from "../src/providers/retroachievements/index.js";
 import { createTestD1 } from "./d1.js";
 import { fakeRaFetch } from "./fixtures.js";
+import { createFakeGoogleSigner } from "./google-keys.js";
 
 const ORIGIN = "http://localhost:8787";
 const CSRF = { "X-Requested-With": "achievement-hub" };
@@ -16,8 +18,13 @@ let env: Env;
 let ra: ReturnType<typeof fakeRaFetch>;
 let googleCalls: { url: string; body?: string }[];
 let app: ReturnType<typeof createApp>;
+let signer: Awaited<ReturnType<typeof createFakeGoogleSigner>>;
 
-/** Stands in for Google's token and userinfo endpoints. */
+beforeAll(async () => {
+  signer = await createFakeGoogleSigner();
+});
+
+/** Stands in for Google's token, userinfo and signing-key endpoints. */
 const fakeGoogle = (async (input: string | URL | Request, init?: RequestInit) => {
   const url = String(input);
   googleCalls.push({ url, body: init?.body?.toString() });
@@ -35,6 +42,7 @@ const fakeGoogle = (async (input: string | URL | Request, init?: RequestInit) =>
       picture: "https://lh3.googleusercontent.com/a/pic",
     });
   }
+  if (url === GOOGLE_JWKS_URL) return Response.json(signer.jwks);
   return new Response("unexpected", { status: 500 });
 }) as typeof fetch;
 
@@ -167,6 +175,93 @@ describe("Google sign-in", () => {
     const res = await client()("/api/auth/google");
     expect(res.headers.get("Location")).toBe("/login?error=google_not_configured");
     expect(await (await client()("/api/auth/config")).json()).toEqual({ google: false, devLogin: true });
+  });
+});
+
+describe("native app sign-in (ID token → bearer session)", () => {
+  /** Requests as the Android app would: bearer token, no cookies. */
+  const appRequest = (path: string, token?: string, init: RequestInit & { json?: unknown } = {}) => {
+    const headers = new Headers(init.headers);
+    headers.set("X-Requested-With", "achievement-hub");
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    if (init.json !== undefined) headers.set("Content-Type", "application/json");
+    return app.request(
+      `${ORIGIN}${path}`,
+      { ...init, headers, body: init.json !== undefined ? JSON.stringify(init.json) : init.body },
+      env,
+    );
+  };
+  const exchange = async (idToken: string) =>
+    appRequest("/api/auth/google/token", undefined, { method: "POST", json: { idToken } });
+
+  it("exchanges a Google ID token for a bearer session", async () => {
+    const res = await exchange(await signer.sign());
+    expect(res.status).toBe(200);
+    expect(res.headers.getSetCookie()).toEqual([]);
+    const body = await res.json();
+    expect(body.user).toMatchObject({ email: "player@example.com", displayName: "Player One" });
+    expect(body.expiresInSeconds).toBeGreaterThan(0);
+
+    const me = await (await appRequest("/api/auth/me", body.token)).json();
+    expect(me.user.email).toBe("player@example.com");
+    expect((await appRequest("/api/providers", body.token)).status).toBe(200);
+
+    const stored = db.raw.prepare("SELECT token_hash FROM sessions").all() as { token_hash: string }[];
+    expect(stored.map((r) => r.token_hash)).not.toContain(body.token);
+  });
+
+  it("signs in to the same account as the web's Google sign-in", async () => {
+    const web = client();
+    const google = new URL((await web("/api/auth/google")).headers.get("Location")!);
+    await web(`/api/auth/google/callback?code=good-code&state=${google.searchParams.get("state")}`);
+    await exchange(await signer.sign());
+    expect(db.raw.prepare("SELECT COUNT(*) AS n FROM users").get()).toEqual({ n: 1 });
+  });
+
+  it("rejects an invalid token without creating a session", async () => {
+    const res = await exchange(await signer.sign({ aud: "someone-else" }));
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe("invalid_id_token");
+    expect(db.raw.prepare("SELECT COUNT(*) AS n FROM sessions").get()).toEqual({ n: 0 });
+    expect((await exchange("garbage")).status).toBe(401);
+    expect((await appRequest("/api/auth/google/token", undefined, { method: "POST", json: {} })).status).toBe(400);
+  });
+
+  it("rejects an unverified email", async () => {
+    const res = await exchange(await signer.sign({ email_verified: false }));
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe("email_unverified");
+  });
+
+  it("reports when Google isn't configured", async () => {
+    env.GOOGLE_CLIENT_ID = undefined;
+    const res = await exchange(await signer.sign());
+    expect(res.status).toBe(503);
+    expect((await res.json()).code).toBe("google_not_configured");
+  });
+
+  it("still requires the CSRF header", async () => {
+    const res = await app.request(
+      `${ORIGIN}/api/auth/google/token`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken: "x" }) },
+      env,
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects unknown bearer tokens and ends the session on logout", async () => {
+    expect((await appRequest("/api/providers", "not-a-real-token")).status).toBe(401);
+    const { token } = await (await exchange(await signer.sign())).json();
+    expect((await appRequest("/api/auth/logout", token, { method: "POST" })).status).toBe(204);
+    expect((await appRequest("/api/providers", token)).status).toBe(401);
+  });
+
+  it("works with the connection endpoints", async () => {
+    const { token } = await (await exchange(await signer.sign())).json();
+    const put = await appRequest("/api/connections/demo", token, { method: "PUT", json: { credentials: { username: "p1" } } });
+    expect(put.status).toBe(200);
+    const games = await (await appRequest("/api/connections/demo/games", token)).json();
+    expect(games.games.length).toBeGreaterThan(0);
   });
 });
 
