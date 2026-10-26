@@ -24,23 +24,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Controller support. Compose already moves focus with the D-pad and
-     * Android turns an unhandled B into Back; these mappings cover the rest:
-     * A selects (as D-pad center), L1/R1 scroll a page (as Page Up/Down).
-     */
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        val mapped = when (event.keyCode) {
-            KeyEvent.KEYCODE_BUTTON_A -> KeyEvent.KEYCODE_DPAD_CENTER
-            KeyEvent.KEYCODE_BUTTON_L1 -> KeyEvent.KEYCODE_PAGE_UP
-            KeyEvent.KEYCODE_BUTTON_R1 -> KeyEvent.KEYCODE_PAGE_DOWN
-            else -> return super.dispatchKeyEvent(event)
-        }
-        return super.dispatchKeyEvent(
+    // Controller support. Compose already moves focus with the D-pad and
+    // Android turns an unhandled B into Back. Buttons the UI doesn't handle
+    // reach onKeyDown/onKeyUp, where these are re-sent as keys it does:
+    // A selects (as D-pad center), L1/R1 scroll a page (as Page Up/Down).
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
+        redispatchControllerKey(event) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
+        redispatchControllerKey(event) || super.onKeyUp(keyCode, event)
+
+    private fun redispatchControllerKey(event: KeyEvent): Boolean {
+        val mapped = CONTROLLER_KEYS[event.keyCode] ?: return false
+        return window.decorView.dispatchKeyEvent(
             KeyEvent(
                 event.downTime, event.eventTime, event.action, mapped, event.repeatCount,
                 event.metaState, event.deviceId, event.scanCode, event.flags, event.source,
             ),
+        )
+    }
+
+    private companion object {
+        val CONTROLLER_KEYS = mapOf(
+            KeyEvent.KEYCODE_BUTTON_A to KeyEvent.KEYCODE_DPAD_CENTER,
+            KeyEvent.KEYCODE_BUTTON_L1 to KeyEvent.KEYCODE_PAGE_UP,
+            KeyEvent.KEYCODE_BUTTON_R1 to KeyEvent.KEYCODE_PAGE_DOWN,
         )
     }
 }
