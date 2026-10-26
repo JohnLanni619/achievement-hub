@@ -75,9 +75,9 @@ class AchievementRepository(
         fetch: suspend () -> T,
     ): Flow<Cached<T>> = flow {
         // A row that no longer decodes (e.g. after a model change) is just a cache miss.
-        val stored = cache.get(key)?.let { row ->
+        val stored: Cached<T>? = cache.get(key)?.let { row ->
             runCatching { json.decodeFromString(serializer, row.json) }.getOrNull()
-                ?.let { Cached(it, row.fetchedAt, fromCache = true) }
+                ?.let { Cached<T>(it, row.fetchedAt, fromCache = true) }
         }
         if (stored != null) emit(stored)
 
