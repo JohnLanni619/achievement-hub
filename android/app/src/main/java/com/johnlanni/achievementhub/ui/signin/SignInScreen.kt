@@ -35,6 +35,8 @@ class SignInViewModel(
     private val api: ApiClient,
     private val session: TokenStore,
     private val googleSignIn: GoogleSignIn,
+    /** Drops any data cached for a previous account before the new session starts. */
+    private val clearCache: suspend () -> Unit,
 ) : ViewModel() {
     var ui by mutableStateOf(SignInUi())
         private set
@@ -46,7 +48,9 @@ class SignInViewModel(
         viewModelScope.launch {
             ui = when (val result = googleSignIn.signIn(activityContext)) {
                 is GoogleSignIn.Result.Success -> try {
-                    session.save(api.exchangeGoogleIdToken(result.idToken).token)
+                    val token = api.exchangeGoogleIdToken(result.idToken).token
+                    clearCache()
+                    session.save(token)
                     SignInUi()
                 } catch (e: ApiException) {
                     SignInUi(error = e.message)

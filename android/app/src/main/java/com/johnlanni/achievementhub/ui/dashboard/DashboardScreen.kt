@@ -34,34 +34,46 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.johnlanni.achievementhub.data.ApiClient
+import com.johnlanni.achievementhub.data.AchievementRepository
 import com.johnlanni.achievementhub.data.Profile
 import com.johnlanni.achievementhub.data.ProviderWithConnection
 import com.johnlanni.achievementhub.ui.Loadable
+import com.johnlanni.achievementhub.ui.Stale
+import com.johnlanni.achievementhub.ui.collectLoadable
 import com.johnlanni.achievementhub.ui.components.ErrorBox
 import com.johnlanni.achievementhub.ui.components.LoadingBox
 import com.johnlanni.achievementhub.ui.components.RemoteImage
+import com.johnlanni.achievementhub.ui.components.StaleBanner
 import com.johnlanni.achievementhub.ui.components.focusHighlight
 import com.johnlanni.achievementhub.ui.components.pageScrollKeys
 import com.johnlanni.achievementhub.ui.components.rememberInitialFocus
-import com.johnlanni.achievementhub.ui.loadCatching
+import com.johnlanni.achievementhub.ui.map
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-class DashboardViewModel(private val api: ApiClient) : ViewModel() {
+class DashboardViewModel(private val repository: AchievementRepository) : ViewModel() {
     var providers by mutableStateOf<Loadable<List<ProviderWithConnection>>>(Loadable.Loading)
         private set
 
     /** Profile summaries for connected providers, keyed by provider id. */
     val profiles = mutableStateMapOf<String, Loadable<Profile>>()
 
+    private var loading: Job? = null
+
     fun load() {
-        viewModelScope.launch {
+        loading?.cancel()
+        loading = viewModelScope.launch {
             if (providers !is Loadable.Ready) providers = Loadable.Loading
-            val result = loadCatching { api.providers() }
-            providers = result
-            if (result is Loadable.Ready) {
-                result.value.filter { it.connection != null }.forEach { provider ->
-                    launch { profiles[provider.id] = loadCatching { api.profile(provider.id).profile } }
+            // The list arrives twice (cached, then fresh); load each profile once.
+            val started = mutableSetOf<String>()
+            repository.providers().collectLoadable { result ->
+                providers = result
+                if (result is Loadable.Ready) {
+                    result.value.filter { it.connection != null && started.add(it.id) }.forEach { provider ->
+                        launch {
+                            repository.profile(provider.id).collectLoadable { profiles[provider.id] = it.map { r -> r.profile } }
+                        }
+                    }
                 }
             }
         }
@@ -89,7 +101,7 @@ fun DashboardScreen(
         when (providers) {
             Loadable.Loading -> LoadingBox(Modifier.padding(padding))
             is Loadable.Failed -> ErrorBox(providers.error, Modifier.padding(padding).padding(16.dp), onRetry = onRetry)
-            is Loadable.Ready -> DashboardList(providers.value, profiles, onOpen, onConnect, Modifier.padding(padding))
+            is Loadable.Ready -> DashboardList(providers.value, providers.stale, profiles, onOpen, onConnect, Modifier.padding(padding))
         }
     }
 }
@@ -97,6 +109,7 @@ fun DashboardScreen(
 @Composable
 private fun DashboardList(
     all: List<ProviderWithConnection>,
+    stale: Stale?,
     profiles: Map<String, Loadable<Profile>>,
     onOpen: (String) -> Unit,
     onConnect: (String) -> Unit,
@@ -114,6 +127,7 @@ private fun DashboardList(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        if (stale?.error != null) item { StaleBanner(stale) }
         item { SectionTitle("Connected services") }
         if (connected.isEmpty()) {
             item { Text("You haven't connected any services yet. Pick one below to get started.") }

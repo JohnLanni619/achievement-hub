@@ -40,26 +40,29 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.johnlanni.achievementhub.data.ApiClient
+import com.johnlanni.achievementhub.data.AchievementRepository
 import com.johnlanni.achievementhub.data.ApiException
 import com.johnlanni.achievementhub.data.GameSummary
 import com.johnlanni.achievementhub.data.ProfileResponse
 import com.johnlanni.achievementhub.data.RecentAchievement
 import com.johnlanni.achievementhub.ui.Loadable
+import com.johnlanni.achievementhub.ui.collectLoadable
 import com.johnlanni.achievementhub.ui.components.AwardChip
 import com.johnlanni.achievementhub.ui.components.ErrorBox
 import com.johnlanni.achievementhub.ui.components.LoadingBox
 import com.johnlanni.achievementhub.ui.components.ProgressBar
 import com.johnlanni.achievementhub.ui.components.RemoteImage
+import com.johnlanni.achievementhub.ui.components.StaleBanner
 import com.johnlanni.achievementhub.ui.components.focusHighlight
 import com.johnlanni.achievementhub.ui.components.pageScrollKeys
 import com.johnlanni.achievementhub.ui.components.rememberInitialFocus
+import com.johnlanni.achievementhub.ui.firstRefreshFailure
 import com.johnlanni.achievementhub.ui.formatDate
-import com.johnlanni.achievementhub.ui.loadCatching
 import com.johnlanni.achievementhub.ui.percent
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-class ProviderViewModel(private val api: ApiClient, private val providerId: String) : ViewModel() {
+class ProviderViewModel(private val repository: AchievementRepository, private val providerId: String) : ViewModel() {
     var profile by mutableStateOf<Loadable<ProfileResponse>>(Loadable.Loading)
         private set
     var games by mutableStateOf<Loadable<List<GameSummary>>>(Loadable.Loading)
@@ -72,26 +75,29 @@ class ProviderViewModel(private val api: ApiClient, private val providerId: Stri
     var actionError by mutableStateOf<String?>(null)
         private set
 
+    private var loading: Job? = null
+
     init {
         load()
     }
 
     fun load() {
-        viewModelScope.launch {
-            launch { profile = loadCatching { api.profile(providerId) } }
-            launch { games = loadCatching { api.games(providerId) } }
-            launch { recent = loadCatching { api.recent(providerId) } }
+        loading?.cancel()
+        loading = viewModelScope.launch {
+            launch { repository.profile(providerId).collectLoadable { profile = it } }
+            launch { repository.games(providerId).collectLoadable { games = it } }
+            launch { repository.recent(providerId).collectLoadable { recent = it } }
         }
     }
 
     /** Clears the server's cache for this connection, then reloads. */
     fun refresh() = runAction {
-        api.refresh(providerId)
+        repository.refresh(providerId)
         load()
     }
 
     fun disconnect(onDisconnected: () -> Unit) = runAction {
-        api.disconnect(providerId)
+        repository.disconnect(providerId)
         onDisconnected()
     }
 
@@ -143,6 +149,7 @@ fun ProviderScreen(
         val scope = rememberCoroutineScope()
         val visibleGames = remember(games, query) { (games as? Loadable.Ready)?.value?.applyQuery(query) }
         val platforms = remember(games) { (games as? Loadable.Ready)?.value?.platforms().orEmpty() }
+        val stale = firstRefreshFailure(profile, games, recent)
 
         LazyColumn(
             state = listState,
@@ -150,6 +157,17 @@ fun ProviderScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (stale != null) {
+                item {
+                    // Saved data is still shown when the service rejects the stored key; offer to re-enter it.
+                    val updateAction: (@Composable () -> Unit)? = if (stale.error?.isCredentialsRejected == true) {
+                        @Composable { OutlinedButton(onClick = onUpdateCredentials) { Text("Update credentials") } }
+                    } else {
+                        null
+                    }
+                    StaleBanner(stale, extraAction = updateAction)
+                }
+            }
             item {
                 when (profile) {
                     Loadable.Loading -> LoadingBox()

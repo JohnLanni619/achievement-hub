@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.johnlanni.achievementhub.data.ApiException
 import com.johnlanni.achievementhub.data.Award
+import com.johnlanni.achievementhub.ui.Stale
+import com.johnlanni.achievementhub.ui.formatUpdated
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -73,6 +75,33 @@ fun ErrorBox(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(error.message, color = MaterialTheme.colorScheme.onErrorContainer)
             if (onRetry != null) Button(onClick = onRetry) { Text("Retry") }
+            extraAction?.invoke()
+        }
+    }
+}
+
+/**
+ * Shown above cached data after refreshing it failed: "Offline · updated 5 min ago",
+ * or the server's error when it was reachable. Nothing while the data is fresh.
+ */
+@Composable
+fun StaleBanner(
+    stale: Stale?,
+    modifier: Modifier = Modifier,
+    now: Long = System.currentTimeMillis(),
+    extraAction: (@Composable () -> Unit)? = null,
+) {
+    if (stale == null) return
+    val error = stale.error ?: return
+    val updated = formatUpdated(stale.fetchedAt, now)
+    val text = if (error.code == "network") "Offline · $updated" else "${error.message} Showing saved data, $updated."
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(text, color = MaterialTheme.colorScheme.onSecondaryContainer, style = MaterialTheme.typography.bodyMedium)
             extraAction?.invoke()
         }
     }

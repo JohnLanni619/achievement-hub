@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.johnlanni.achievementhub.data.Achievement
+import com.johnlanni.achievementhub.data.ApiException
 import com.johnlanni.achievementhub.data.Connection
 import com.johnlanni.achievementhub.data.GameDetail
 import com.johnlanni.achievementhub.data.Profile
@@ -101,6 +102,47 @@ class ScreensTest {
         compose.onNodeWithText("Locked").performClick()
         compose.onNodeWithText("Earned one").assertDoesNotExist()
         compose.onNodeWithText("Still locked").assertExists()
+    }
+
+    @Test
+    fun `cached data shows an offline banner when refreshing failed`() {
+        val game = GameDetail(id = "228", title = "Super Mario World", total = 0)
+        val fetchedAt = System.currentTimeMillis() - 5 * 60_000
+        compose.setContent {
+            AchievementHubTheme {
+                GameScreen(
+                    game = Loadable.Ready(game, Stale(fetchedAt, ApiException(0, "network", "Couldn't reach Achievement Hub."))),
+                    filter = AchievementFilter.All,
+                    sort = AchievementSort.Default,
+                    onFilterChange = {},
+                    onSortChange = {},
+                    onRetry = {},
+                    onBack = {},
+                )
+            }
+        }
+        compose.onNodeWithText("Offline · updated 5 min ago").assertExists()
+        compose.onNodeWithText("This game has no achievements yet.").assertExists()
+    }
+
+    @Test
+    fun `no banner while cached data is still refreshing`() {
+        val game = GameDetail(id = "228", title = "Super Mario World", total = 0)
+        compose.setContent {
+            AchievementHubTheme {
+                GameScreen(
+                    game = Loadable.Ready(game, Stale(System.currentTimeMillis(), error = null)),
+                    filter = AchievementFilter.All,
+                    sort = AchievementSort.Default,
+                    onFilterChange = {},
+                    onSortChange = {},
+                    onRetry = {},
+                    onBack = {},
+                )
+            }
+        }
+        compose.onNodeWithText("Offline", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("This game has no achievements yet.").assertExists()
     }
 
     @Test

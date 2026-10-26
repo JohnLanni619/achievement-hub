@@ -27,7 +27,7 @@ class InMemoryTokenStore(initial: String? = null) : TokenStore {
 }
 
 /** Answers requests in-process, recording them, so no network is involved. */
-private class FakeServer : Interceptor {
+internal class FakeServer : Interceptor {
     val requests = mutableListOf<Request>()
     var respond: (Request) -> Pair<Int, String> = { 200 to "{}" }
 

@@ -30,18 +30,19 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.johnlanni.achievementhub.data.ApiClient
+import com.johnlanni.achievementhub.data.AchievementRepository
 import com.johnlanni.achievementhub.data.ApiException
 import com.johnlanni.achievementhub.data.ProviderWithConnection
 import com.johnlanni.achievementhub.ui.Loadable
+import com.johnlanni.achievementhub.ui.collectLoadable
 import com.johnlanni.achievementhub.ui.components.ErrorBox
 import com.johnlanni.achievementhub.ui.components.LoadingBox
 import com.johnlanni.achievementhub.ui.components.focusHighlight
 import com.johnlanni.achievementhub.ui.components.rememberInitialFocus
-import com.johnlanni.achievementhub.ui.loadCatching
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-class ConnectViewModel(private val api: ApiClient, private val providerId: String) : ViewModel() {
+class ConnectViewModel(private val repository: AchievementRepository, private val providerId: String) : ViewModel() {
     var provider by mutableStateOf<Loadable<ProviderWithConnection>>(Loadable.Loading)
         private set
     val values = mutableStateMapOf<String, String>()
@@ -54,14 +55,19 @@ class ConnectViewModel(private val api: ApiClient, private val providerId: Strin
         load()
     }
 
+    private var loading: Job? = null
+
     fun load() {
-        viewModelScope.launch {
+        loading?.cancel()
+        loading = viewModelScope.launch {
             provider = Loadable.Loading
-            provider = when (val result = loadCatching { api.providers() }) {
-                is Loadable.Ready -> result.value.firstOrNull { it.id == providerId }?.let { Loadable.Ready(it) }
-                    ?: Loadable.Failed(ApiException(404, null, "Unknown service."))
-                is Loadable.Failed -> result
-                Loadable.Loading -> Loadable.Loading
+            repository.providers().collectLoadable { result ->
+                provider = when (result) {
+                    is Loadable.Ready -> result.value.firstOrNull { it.id == providerId }?.let { Loadable.Ready(it, result.stale) }
+                        ?: Loadable.Failed(ApiException(404, null, "Unknown service."))
+                    is Loadable.Failed -> result
+                    Loadable.Loading -> Loadable.Loading
+                }
             }
         }
     }
@@ -73,7 +79,7 @@ class ConnectViewModel(private val api: ApiClient, private val providerId: Strin
         error = null
         viewModelScope.launch {
             try {
-                api.connect(providerId, values.mapValues { it.value.trim() })
+                repository.connect(providerId, values.mapValues { it.value.trim() })
                 onConnected()
             } catch (e: ApiException) {
                 error = e.message
