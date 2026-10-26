@@ -3,6 +3,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import { HttpError, type AppEnv, type User } from "../context.js";
 import { pkceChallenge, randomToken, sha256Hex } from "../crypto.js";
+import { createGoogleIdTokenVerifier, IdTokenError } from "../google-id-token.js";
 
 export const SESSION_COOKIE = "ah_session";
 const OAUTH_COOKIE = "ah_oauth";
@@ -46,9 +47,19 @@ function googleConfigured(c: Context<AppEnv>): boolean {
   return Boolean(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET);
 }
 
+/**
+ * The session token from `Authorization: Bearer` (native apps) or the
+ * session cookie (web). Both refer to rows in the same sessions table.
+ */
+function sessionToken(c: Context<AppEnv>): string | undefined {
+  const auth = c.req.header("Authorization");
+  if (auth?.startsWith("Bearer ")) return auth.slice("Bearer ".length).trim() || undefined;
+  return getCookie(c, SESSION_COOKIE);
+}
+
 export const sessionMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   c.set("user", null);
-  const token = getCookie(c, SESSION_COOKIE);
+  const token = sessionToken(c);
   if (token) {
     const row = await c.env.DB.prepare(
       `SELECT u.id, u.email, u.display_name, u.avatar_url FROM sessions s JOIN users u ON u.id = s.user_id
@@ -78,12 +89,19 @@ async function upsertUser(c: Context<AppEnv>, subject: string, email: string, na
   return row!;
 }
 
-async function startSession(c: Context<AppEnv>, userId: number) {
+/** Creates a session row and returns its token. */
+async function createSession(c: Context<AppEnv>, userId: number): Promise<string> {
   const token = randomToken();
   await c.env.DB.prepare("DELETE FROM sessions WHERE expires_at <= datetime('now')").run();
   await c.env.DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, datetime('now', ?))")
     .bind(await sha256Hex(token), userId, `+${SESSION_TTL_SECONDS} seconds`)
     .run();
+  return token;
+}
+
+/** Starts a web session: creates it and sets the session cookie. */
+async function startSession(c: Context<AppEnv>, userId: number) {
+  const token = await createSession(c, userId);
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "Lax",
@@ -104,6 +122,7 @@ interface GoogleUserInfo {
 /** `fetchImpl` is injectable so tests can stand in for Google. */
 export function authRoutes(fetchImpl: typeof fetch = (...args) => fetch(...args)) {
   const router = new Hono<AppEnv>();
+  const verifyIdToken = createGoogleIdTokenVerifier(fetchImpl);
 
   router.get("/config", (c) => c.json({ google: googleConfigured(c), devLogin: devLoginAllowed(c) }));
 
@@ -181,6 +200,32 @@ export function authRoutes(fetchImpl: typeof fetch = (...args) => fetch(...args)
     return c.redirect(safeReturnTo(stored.returnTo));
   });
 
+  // Native apps: exchange a Google ID token (from Android's Credential
+  // Manager) for a session token, sent back as `Authorization: Bearer`.
+  router.post("/google/token", async (c) => {
+    const clientId = c.env.GOOGLE_CLIENT_ID;
+    if (!clientId) throw new HttpError(503, "Google sign-in isn't configured on this server.", "google_not_configured");
+    const { idToken } = z
+      .object({ idToken: z.string().min(1).max(8192) })
+      .parse(await c.req.json().catch(() => ({})));
+
+    let claims;
+    try {
+      claims = await verifyIdToken(idToken, clientId);
+    } catch (err) {
+      if (!(err instanceof IdTokenError)) throw err;
+      if (err.status === 502) throw new HttpError(502, "Couldn't reach Google. Try again shortly.", "google_failed");
+      throw new HttpError(401, "Google sign-in failed. Please try again.", "invalid_id_token");
+    }
+    if (!claims.email || !claims.email_verified) {
+      throw new HttpError(401, "Your Google account's email address isn't verified.", "email_unverified");
+    }
+
+    const user = await upsertUser(c, claims.sub, claims.email, claims.name || claims.email, claims.picture ?? null);
+    const token = await createSession(c, user.id);
+    return c.json({ token, expiresInSeconds: SESSION_TTL_SECONDS, user: toUser(user) });
+  });
+
   // Local development only: sign in as any email without Google.
   router.post("/dev-login", async (c) => {
     if (!devLoginAllowed(c)) throw new HttpError(404, "Not found.");
@@ -196,7 +241,7 @@ export function authRoutes(fetchImpl: typeof fetch = (...args) => fetch(...args)
   });
 
   router.post("/logout", async (c) => {
-    const token = getCookie(c, SESSION_COOKIE);
+    const token = sessionToken(c);
     if (token) await c.env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(await sha256Hex(token)).run();
     deleteCookie(c, SESSION_COOKIE, { path: "/" });
     return c.body(null, 204);
