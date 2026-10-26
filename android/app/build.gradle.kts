@@ -69,8 +69,6 @@ android {
     lint {
         abortOnError = true
         checkReleaseBuilds = true
-        // Plain-text report, printed by CI on failure (the HTML one is only in an artifact).
-        textReport = true
     }
 }
 
