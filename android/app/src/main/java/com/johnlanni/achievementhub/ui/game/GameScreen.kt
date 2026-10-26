@@ -37,36 +37,46 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.johnlanni.achievementhub.data.Achievement
-import com.johnlanni.achievementhub.data.ApiClient
+import com.johnlanni.achievementhub.data.AchievementRepository
 import com.johnlanni.achievementhub.data.GameDetail
 import com.johnlanni.achievementhub.ui.Loadable
+import com.johnlanni.achievementhub.ui.Stale
+import com.johnlanni.achievementhub.ui.collectLoadable
 import com.johnlanni.achievementhub.ui.components.AwardChip
 import com.johnlanni.achievementhub.ui.components.ErrorBox
 import com.johnlanni.achievementhub.ui.components.LoadingBox
 import com.johnlanni.achievementhub.ui.components.ProgressBar
 import com.johnlanni.achievementhub.ui.components.RemoteImage
+import com.johnlanni.achievementhub.ui.components.StaleBanner
 import com.johnlanni.achievementhub.ui.components.focusHighlight
 import com.johnlanni.achievementhub.ui.components.pageScrollKeys
 import com.johnlanni.achievementhub.ui.components.rememberInitialFocus
 import com.johnlanni.achievementhub.ui.formatDate
-import com.johnlanni.achievementhub.ui.loadCatching
 import com.johnlanni.achievementhub.ui.percent
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-class GameViewModel(private val api: ApiClient, private val providerId: String, private val gameId: String) : ViewModel() {
+class GameViewModel(
+    private val repository: AchievementRepository,
+    private val providerId: String,
+    private val gameId: String,
+) : ViewModel() {
     var game by mutableStateOf<Loadable<GameDetail>>(Loadable.Loading)
         private set
     var filter by mutableStateOf(AchievementFilter.All)
     var sort by mutableStateOf(AchievementSort.Default)
+
+    private var loading: Job? = null
 
     init {
         load()
     }
 
     fun load() {
-        viewModelScope.launch {
-            game = Loadable.Loading
-            game = loadCatching { api.game(providerId, gameId) }
+        loading?.cancel()
+        loading = viewModelScope.launch {
+            if (game !is Loadable.Ready) game = Loadable.Loading
+            repository.game(providerId, gameId).collectLoadable { game = it }
         }
     }
 }
@@ -93,7 +103,7 @@ fun GameScreen(
         when (game) {
             Loadable.Loading -> LoadingBox(Modifier.padding(padding))
             is Loadable.Failed -> ErrorBox(game.error, Modifier.padding(padding).padding(16.dp), onRetry = onRetry)
-            is Loadable.Ready -> GameContent(game.value, filter, sort, onFilterChange, onSortChange, Modifier.padding(padding))
+            is Loadable.Ready -> GameContent(game.value, game.stale, filter, sort, onFilterChange, onSortChange, Modifier.padding(padding))
         }
     }
 }
@@ -102,6 +112,7 @@ fun GameScreen(
 @Composable
 private fun GameContent(
     game: GameDetail,
+    stale: Stale?,
     filter: AchievementFilter,
     sort: AchievementSort,
     onFilterChange: (AchievementFilter) -> Unit,
@@ -119,6 +130,7 @@ private fun GameContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        if (stale?.error != null) item { StaleBanner(stale) }
         item { GameHeader(game) }
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

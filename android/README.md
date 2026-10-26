@@ -4,6 +4,10 @@ A native Kotlin + Jetpack Compose app that uses the same Cloudflare Worker API a
 
 GitHub Actions builds every change: [`.github/workflows/android.yml`](../.github/workflows/android.yml) runs lint and the unit tests, then builds a release APK that you can download from the workflow run. Pushing a tag like `android-v0.1.0` publishes a signed APK on the repo's **Releases** page ([`android-release.yml`](../.github/workflows/android-release.yml)).
 
+## Offline use
+
+The app saves the last data it fetched (services, profiles, game lists, recent unlocks and each game you've opened) in an on-device database. Screens open from that copy straight away and refresh in the background. When the refresh fails, the saved copy stays on screen with a note such as "Offline · updated 5 min ago". Signing out, or the session expiring, deletes the saved data. Disconnecting or reconnecting a service deletes that service's data.
+
 ## One-time setup
 
 You do this once. It takes about 15 minutes.

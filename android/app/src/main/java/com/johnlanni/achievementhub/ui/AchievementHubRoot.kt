@@ -44,7 +44,7 @@ fun AchievementHubRoot(container: AppContainer) {
     when {
         !ready -> LoadingBox()
         token == null -> {
-            val vm = viewModel { SignInViewModel(container.api, container.session, container.googleSignIn) }
+            val vm = viewModel { SignInViewModel(container.api, container.session, container.googleSignIn, container.repository::clear) }
             val activity = LocalContext.current
             SignInScreen(vm.ui, onSignIn = { vm.signIn(activity) })
         }
@@ -57,10 +57,11 @@ private fun MainNavigation(container: AppContainer) {
     val nav = rememberNavController()
     val scope = rememberCoroutineScope()
     val api = container.api
+    val repository = container.repository
 
     NavHost(navController = nav, startDestination = DashboardRoute) {
         composable<DashboardRoute> {
-            val vm = viewModel { DashboardViewModel(api) }
+            val vm = viewModel { DashboardViewModel(repository) }
             // Reload whenever the dashboard is shown again, e.g. after connecting a service.
             LaunchedEffect(Unit) { vm.load() }
             DashboardScreen(
@@ -79,7 +80,7 @@ private fun MainNavigation(container: AppContainer) {
         }
         composable<ConnectRoute> { entry ->
             val route = entry.toRoute<ConnectRoute>()
-            val vm = viewModel { ConnectViewModel(api, route.providerId) }
+            val vm = viewModel { ConnectViewModel(repository, route.providerId) }
             ConnectScreen(
                 provider = vm.provider,
                 values = vm.values,
@@ -97,7 +98,7 @@ private fun MainNavigation(container: AppContainer) {
         }
         composable<ProviderRoute> { entry ->
             val route = entry.toRoute<ProviderRoute>()
-            val vm = viewModel { ProviderViewModel(api, route.providerId) }
+            val vm = viewModel { ProviderViewModel(repository, route.providerId) }
             ProviderScreen(
                 profile = vm.profile,
                 games = vm.games,
@@ -116,7 +117,7 @@ private fun MainNavigation(container: AppContainer) {
         }
         composable<GameRoute> { entry ->
             val route = entry.toRoute<GameRoute>()
-            val vm = viewModel { GameViewModel(api, route.providerId, route.gameId) }
+            val vm = viewModel { GameViewModel(repository, route.providerId, route.gameId) }
             GameScreen(
                 game = vm.game,
                 filter = vm.filter,
