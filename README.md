@@ -6,6 +6,10 @@ Track your achievements from multiple gaming services in one place. Sign in with
 
 It runs on **Cloudflare's free tier**: a Worker serves the React app and the API, and **D1** (Cloudflare's SQLite database) stores the data.
 
+## Native Android app (in progress)
+
+A Kotlin + Jetpack Compose app lives in [`android/`](android/). It uses the same Worker API and Google account as the website. See [`android/README.md`](android/README.md) for one-time setup (signing key, GitHub secrets, Google OAuth client) and how to install builds.
+
 ## Using it on Android handhelds (AYN Thor, Retroid, Odin…)
 
 Achievement Hub is an installable web app (PWA), so there's no APK to sideload, and updates arrive automatically on every deploy.
