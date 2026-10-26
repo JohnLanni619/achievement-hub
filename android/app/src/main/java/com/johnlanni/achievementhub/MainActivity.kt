@@ -1,63 +1,55 @@
 package com.johnlanni.achievementhub
 
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Surface
+import com.johnlanni.achievementhub.ui.AchievementHubRoot
 import com.johnlanni.achievementhub.ui.theme.AchievementHubTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val config = ApiConfig.fromBuildConfig()
+        val container = (application as AchievementHubApp).container
         setContent {
             AchievementHubTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
-                    StatusScreen(config, Modifier.padding(padding))
+                Surface(color = MaterialTheme.colorScheme.background) {
+                    AchievementHubRoot(container)
                 }
             }
         }
     }
-}
 
-/** Placeholder until the real screens land; shows whether the build is configured. */
-@Composable
-fun StatusScreen(config: ApiConfig, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text("Achievement Hub", style = MaterialTheme.typography.headlineMedium)
-        if (config.isConfigured) {
-            Text("Server: ${config.baseUrl}", style = MaterialTheme.typography.bodyMedium)
-            Text("Version ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall)
-        } else {
-            Text(
-                "This build isn't configured with a server URL and Google client ID. " +
-                    "See android/README.md.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
+    // Controller support. Compose already moves focus with the D-pad and
+    // Android turns an unhandled B into Back. Buttons the UI doesn't handle
+    // reach onKeyDown/onKeyUp, where these are re-sent as keys it does:
+    // A selects (as D-pad center), L1/R1 scroll a page (as Page Up/Down).
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
+        redispatchControllerKey(event) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
+        redispatchControllerKey(event) || super.onKeyUp(keyCode, event)
+
+    private fun redispatchControllerKey(event: KeyEvent): Boolean {
+        val mapped = CONTROLLER_KEYS[event.keyCode] ?: return false
+        return window.decorView.dispatchKeyEvent(
+            KeyEvent(
+                event.downTime, event.eventTime, event.action, mapped, event.repeatCount,
+                event.metaState, event.deviceId, event.scanCode, event.flags, event.source,
+            ),
+        )
     }
-}
 
-@Preview(showBackground = true)
-@Composable
-private fun StatusScreenPreview() {
-    AchievementHubTheme {
-        StatusScreen(ApiConfig("https://achievement-hub.example.workers.dev", "client-id"))
+    private companion object {
+        val CONTROLLER_KEYS = mapOf(
+            KeyEvent.KEYCODE_BUTTON_A to KeyEvent.KEYCODE_DPAD_CENTER,
+            KeyEvent.KEYCODE_BUTTON_L1 to KeyEvent.KEYCODE_PAGE_UP,
+            KeyEvent.KEYCODE_BUTTON_R1 to KeyEvent.KEYCODE_PAGE_DOWN,
+        )
     }
 }

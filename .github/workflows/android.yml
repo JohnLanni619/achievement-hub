@@ -56,6 +56,10 @@ jobs:
           ORG_GRADLE_PROJECT_versionName: ci-${{ github.run_number }}
         run: ./gradlew lint testDebugUnitTest assembleRelease --stacktrace
 
+      - name: Show lint findings
+        if: failure()
+        run: cat app/build/reports/lint-results-*.txt 2>/dev/null || echo "No lint text report."
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
